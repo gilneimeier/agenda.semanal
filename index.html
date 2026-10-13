@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Gerador de Card - Agenda Semanal (v15)</title>
+    <title>Gerador de Card - Agenda Semanal (v16)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
@@ -466,7 +466,7 @@
                     let bgGradientClass = iDia % 2 === 0 
                         ? "bg-gradient-to-b from-orange-100 to-orange-200" 
                         : "bg-gradient-to-b from-orange-50 to-orange-100";
-                    td.className = `border-r-2 border-black p-0.5 h-[85px] relative cursor-pointer hover:brightness-95 transition-all overflow-hidden ${bgGradientClass}`;
+                    td.className = `border-2 border-black p-0.5 h-[85px] relative cursor-pointer hover:brightness-95 transition-all overflow-hidden ${bgGradientClass}`;
                     if(iDia === 6) td.classList.remove('border-r-2');
                     td.setAttribute('data-row', index);
                     td.setAttribute('data-col', dia);
