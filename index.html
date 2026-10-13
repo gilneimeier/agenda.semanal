@@ -1,0 +1,683 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gerador de Card - Agenda Semanal (v15)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        @media print {
+            .no-print { display: none !important; }
+            body { background-color: white !important; padding: 0 !important; }
+            #capture-area { box-shadow: none !important; border: none !important; width: 100% !important; max-width: 100% !important; }
+        }
+        
+        .editable-field {
+            outline: none;
+            transition: all 0.2s;
+            display: inline-block;
+            min-width: 10px;
+        }
+        
+        /* Modal Styles */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.5);
+            z-index: 50;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .modal.active {
+            display: flex;
+        }
+
+        td { vertical-align: middle; }
+
+        /* Estilização para o layout de Card Social Media */
+        #capture-wrapper {
+            width: 100%;
+            display: flex;
+            justify-content: center;
+            overflow-x: auto;
+        }
+
+        #capture-area {
+            min-width: 1280px; 
+            background-color: #000; 
+        }
+        
+        [contenteditable]:empty:before {
+            content: attr(placeholder);
+            color: rgba(255, 255, 255, 0.5);
+            cursor: text;
+        }
+        
+        .evento-wrapper {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+            line-height: 1.1;
+        }
+    </style>
+</head>
+<body class="bg-gray-800 min-h-screen p-2 sm:p-6 flex flex-col items-center font-sans">
+
+    <!-- Painel de Controles -->
+    <div class="no-print w-full max-w-7xl bg-white p-4 rounded-lg shadow-2xl mb-6 flex flex-wrap gap-4 items-center justify-between border-t-4 border-orange-500">
+        <div>
+            <h1 class="text-xl font-bold text-gray-900"><i class="fa-solid fa-palette text-orange-500 mr-2"></i> Gerador de Card (v13 - Backup Local)</h1>
+            <p class="text-sm text-gray-600">Sistema corrigido. Adicionado Backup e Restauração local de arquivos.</p>
+        </div>
+        <div class="flex gap-2 flex-wrap">
+            <button onclick="abrirConfigModal()" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded shadow transition text-sm font-bold">
+                <i class="fa-solid fa-gear"></i> Configurações
+            </button>
+            
+            <!-- Botões de Backup / Restore -->
+            <button onclick="exportarBackup()" class="bg-teal-600 hover:bg-teal-700 text-white px-3 py-2 rounded shadow transition text-sm font-bold" title="Salvar Backup no PC">
+                <i class="fa-solid fa-download"></i> Backup
+            </button>
+            <button onclick="importarBackup()" class="bg-teal-600 hover:bg-teal-700 text-white px-3 py-2 rounded shadow transition text-sm font-bold" title="Restaurar Backup do PC">
+                <i class="fa-solid fa-upload"></i> Restaurar
+            </button>
+            <!-- Input oculto para carregar arquivo -->
+            <input type="file" id="fileInputBackup" accept=".json" style="display:none;" onchange="lerArquivoBackup(event)">
+
+            <button onclick="limparTabela()" class="bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded shadow transition text-sm font-bold">
+                <i class="fa-solid fa-trash"></i> Limpar
+            </button>
+            <button onclick="salvarDados()" class="bg-gray-600 hover:bg-gray-700 text-white px-3 py-2 rounded shadow transition text-sm font-bold">
+                <i class="fa-solid fa-save"></i> Salvar (Navegador)
+            </button>
+            <button onclick="exportarImagem()" class="bg-orange-500 hover:bg-orange-600 text-white px-5 py-2 rounded shadow transition text-sm font-bold animate-pulse">
+                <i class="fa-solid fa-image mr-1"></i> Gerar Card
+            </button>
+        </div>
+    </div>
+
+    <!-- Área da Tabela -->
+    <div id="capture-wrapper">
+        <div id="capture-area" class="shadow-2xl rounded-xl overflow-hidden border-4 border-orange-500 flex flex-col">
+            
+            <div class="bg-black text-orange-500 font-extrabold text-center py-5 border-b-4 border-orange-500 uppercase flex flex-col relative overflow-hidden">
+                <div class="absolute inset-0 bg-gradient-to-r from-orange-600/20 to-transparent"></div>
+                <span class="text-4xl tracking-wider drop-shadow-lg mb-2 relative z-10">S. E. NOVO HORIZONTE</span>
+                <span class="text-xl text-white relative z-10">
+                    PLANILHA TREINAMENTOS SEMANAL - <span id="periodo" contenteditable="true" class="border-b-2 border-dashed border-gray-400 px-2 editable-field text-orange-400 hover:bg-orange-900/50">28 SETEMBRO - 04 OUTUBRO 2026</span>
+                </span>
+            </div>
+            
+            <div class="bg-gradient-to-r from-orange-500 to-orange-400 text-black font-extrabold text-center text-[15px] py-3 px-4 border-b-4 border-black uppercase tracking-wide">
+                <span id="aviso" contenteditable="true" class="editable-field hover:bg-white/20 px-2 rounded">O ATLETA DEVERÁ ESTAR PRONTO PARA O TREINO 5 MIN ANTES DO HORÁRIO PREVISTO - OBRIGATÓRIO O USO DO UNIFORME DE TREINO, MEIÕES, CANELEIRAS E CHUTEIRA</span>
+            </div>
+
+            <div class="bg-black p-0.5 flex-grow">
+                <table class="w-full border-collapse text-center text-[15px] table-fixed">
+                    <thead>
+                        <tr class="bg-black text-orange-500 uppercase font-extrabold text-[15px] tracking-wide">
+                            <th class="border-2 border-black p-3 w-[16%]">Ano / Nasc</th>
+                            <th class="border-2 border-black p-3 w-[12%] bg-gradient-to-t from-orange-600/30 to-black">Segunda</th>
+                            <th class="border-2 border-black p-3 w-[12%] bg-gradient-to-t from-orange-500/30 to-black">Terça</th>
+                            <th class="border-2 border-black p-3 w-[12%] bg-gradient-to-t from-orange-600/30 to-black">Quarta</th>
+                            <th class="border-2 border-black p-3 w-[12%] bg-gradient-to-t from-orange-500/30 to-black">Quinta</th>
+                            <th class="border-2 border-black p-3 w-[12%] bg-gradient-to-t from-orange-600/30 to-black">Sexta</th>
+                            <th class="border-2 border-black p-3 w-[12%] bg-gradient-to-t from-orange-500/30 to-black">Sábado</th>
+                            <th class="border-2 border-black p-3 w-[12%] bg-gradient-to-t from-orange-600/30 to-black">Domingo</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tabela-corpo">
+                        <!-- Gerado via JS -->
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="bg-gradient-to-r from-gray-900 via-black to-gray-900 border-t-4 border-orange-500 py-4 px-6 text-center">
+                <div id="footer-preparadores" contenteditable="true" placeholder="Clique para digitar os nomes dos professores/preparadores..." class="editable-field text-orange-500 font-extrabold text-[17px] uppercase tracking-widest hover:bg-gray-800 p-2 rounded transition-colors inline-block min-w-[50%]">**PREPARADORES FÍSICOS: PROFESSOR FELIPE E PROFESSOR PIETRO**</div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- Modal de Categoria/Professor (Linha) -->
+    <div id="catModal" class="modal no-print">
+        <div class="bg-gray-900 rounded-lg shadow-2xl border-2 border-orange-500 w-full max-w-sm p-6 transform transition-all text-white">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-lg font-bold text-orange-500">Configurar Categoria</h3>
+                <button onclick="fecharCatModal()" class="text-gray-400 hover:text-white">
+                    <i class="fa-solid fa-times text-xl"></i>
+                </button>
+            </div>
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-300 mb-1">Ano(s) de Nascimento</label>
+                    <input type="text" id="modalCatAnos" placeholder="Ex: 2020 - 2021" class="w-full bg-gray-800 border border-gray-600 rounded p-2 focus:ring-orange-500 focus:border-orange-500 text-white">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-300 mb-1">Professor(es) Padrão</label>
+                    <input type="text" id="modalCatProf" placeholder="Ex: Prof Diego/Jornada" class="w-full bg-gray-800 border border-gray-600 rounded p-2 focus:ring-orange-500 focus:border-orange-500 text-white" list="professoresList">
+                </div>
+            </div>
+            <div class="mt-6 flex justify-end gap-3">
+                <button onclick="salvarCatModal()" class="px-4 py-2 bg-orange-500 text-black rounded hover:bg-orange-600 text-sm font-bold shadow">
+                    Atualizar Linha
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal de Configurações Gerais -->
+    <div id="configModal" class="modal no-print">
+        <div class="bg-gray-900 rounded-lg shadow-2xl border-2 border-blue-500 w-full max-w-3xl p-6 transform transition-all text-white">
+            <div class="flex justify-between items-center mb-4 border-b border-gray-700 pb-2">
+                <h3 class="text-lg font-bold text-blue-400"><i class="fa-solid fa-gear mr-2"></i>Editar Opções</h3>
+                <button onclick="fecharConfigModal()" class="text-gray-400 hover:text-white">
+                    <i class="fa-solid fa-times text-xl"></i>
+                </button>
+            </div>
+            <p class="text-sm text-gray-400 mb-4">Adicione, remova ou edite as opções. Digite <b>um item por linha</b>.</p>
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div>
+                    <label class="block text-sm font-bold text-orange-400 mb-1"><i class="fa-solid fa-tag mr-1"></i> Tipos de Evento</label>
+                    <textarea id="configTiposTxt" rows="8" class="w-full bg-gray-800 border border-gray-600 rounded p-2 focus:ring-blue-500 focus:border-blue-500 text-white text-sm whitespace-pre" placeholder="TREINO&#10;FUTSAL..."></textarea>
+                </div>
+                <div>
+                    <label class="block text-sm font-bold text-orange-400 mb-1"><i class="fa-solid fa-location-dot mr-1"></i> Locais</label>
+                    <textarea id="configLocaisTxt" rows="8" class="w-full bg-gray-800 border border-gray-600 rounded p-2 focus:ring-blue-500 focus:border-blue-500 text-white text-sm whitespace-pre" placeholder="CT NH&#10;QUADRA C..."></textarea>
+                </div>
+                <div>
+                    <label class="block text-sm font-bold text-orange-400 mb-1"><i class="fa-solid fa-user-tie mr-1"></i> Professores</label>
+                    <textarea id="configProfessoresTxt" rows="8" class="w-full bg-gray-800 border border-gray-600 rounded p-2 focus:ring-blue-500 focus:border-blue-500 text-white text-sm whitespace-pre" placeholder="PROF DIEGO..."></textarea>
+                </div>
+            </div>
+            <div class="mt-6 flex justify-end gap-3 pt-4 border-t border-gray-700">
+                <button onclick="fecharConfigModal()" class="px-4 py-2 bg-gray-700 text-white rounded hover:bg-gray-600 text-sm font-bold">Cancelar</button>
+                <button onclick="salvarConfigModal()" class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm font-bold shadow">Salvar Listas</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal de Edição de Evento (Célula) -->
+    <div id="cellModal" class="modal no-print">
+        <div class="bg-gray-900 rounded-lg shadow-2xl border-2 border-orange-500 w-full max-w-md p-6 transform transition-all text-white">
+            <div class="flex justify-between items-center mb-4 border-b border-gray-700 pb-2">
+                <h3 class="text-lg font-bold text-orange-500" id="modalTitle">Editar Evento</h3>
+                <button onclick="fecharModal()" class="text-gray-400 hover:text-white">
+                    <i class="fa-solid fa-times text-xl"></i>
+                </button>
+            </div>
+            
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-300 mb-1">Tipo de Evento</label>
+                    <select id="modalTipo" class="w-full bg-gray-800 border border-gray-600 rounded p-2 focus:ring-orange-500 focus:border-orange-500 text-white">
+                    </select>
+                </div>
+
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-300 mb-1">Início</label>
+                        <input type="time" id="modalHoraInicio" class="w-full bg-gray-800 border border-gray-600 rounded p-2 text-white style='color-scheme: dark;'">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-300 mb-1">Fim</label>
+                        <input type="time" id="modalHoraFim" class="w-full bg-gray-800 border border-gray-600 rounded p-2 text-white style='color-scheme: dark;'">
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-300 mb-1">Local / Detalhes (Adversário)</label>
+                    <input type="text" id="modalLocal" class="w-full bg-gray-800 border border-gray-600 rounded p-2 text-white" list="locaisList">
+                    <datalist id="locaisList"></datalist>
+                </div>
+                
+                <div>
+                    <label class="block text-sm font-medium text-gray-300 mb-1">Professor Responsável</label>
+                    <input type="text" id="modalProfEvento" class="w-full bg-gray-800 border border-gray-600 rounded p-2 text-white" list="professoresList">
+                    <datalist id="professoresList"></datalist>
+                </div>
+            </div>
+
+            <!-- Botões Inferiores com Copiar e Colar -->
+            <div class="mt-6 flex justify-between items-center pt-4 border-t border-gray-700">
+                <div class="flex gap-2">
+                    <button onclick="copiarEvento()" class="px-3 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700 text-sm font-bold shadow transition-colors" title="Copiar Informações"><i class="fa-solid fa-copy mr-1"></i> Copiar</button>
+                    <button onclick="colarEvento()" id="btnColar" class="px-3 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700 text-sm font-bold shadow transition-colors opacity-50 cursor-not-allowed" title="Colar Informações" disabled><i class="fa-solid fa-paste mr-1"></i> Colar</button>
+                </div>
+                <div class="flex gap-2">
+                    <button onclick="limparCelulaModal()" class="px-3 py-2 bg-red-600 text-white rounded hover:bg-red-700 text-sm font-bold shadow"><i class="fa-solid fa-trash"></i></button>
+                    <button onclick="salvarModal()" class="px-4 py-2 bg-orange-500 text-black rounded hover:bg-orange-600 text-sm font-bold shadow">Salvar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const categoriasIniciais = [
+            { anos: "2020 - 2021", prof: "Prof Diego/Jornada" },
+            { anos: "2019", prof: "Prof Jornada/Diego" },
+            { anos: "2018", prof: "Prof Jornada" },
+            { anos: "2017", prof: "Prof Diego" },
+            { anos: "2016", prof: "Prof Breda" },
+            { anos: "2015", prof: "Prof Breda" },
+            { anos: "2014", prof: "Prof Breda" },
+            { anos: "2013", prof: "Prof Breda" },
+            { anos: "2012", prof: "Prof Bruno" },
+            { anos: "2011", prof: "Prof Bruno" },
+            { anos: "2010", prof: "Prof Marcelo" },
+            { anos: "2009", prof: "Prof Marcelo" }
+        ];
+
+        const diasSemana = ['seg', 'ter', 'qua', 'qui', 'sex', 'sab', 'dom'];
+        const nomesDias = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado', 'Domingo'];
+        
+        let celulaAtual = null;
+        let catCellAtual = null;
+        
+        // Memória para Copiar/Colar
+        let eventoCopiado = null;
+
+        let configDrop = {
+            tipos: ["TREINO", "FUTSAL", "JOGO: MUNICIPAL", "JOGO: ESTADUAL", "AMISTOSO", "FOLGA"],
+            locais: ["CT NH", "CDM QUADRA C", "GUARANI", "MUNICIPAL FUTSAL"],
+            professores: ["PROF DIEGO", "PROF JORNADA", "PROF BREDA", "PROF BRUNO", "PROF MARCELO", "PROF DIEGO/JORNADA", "PROF JORNADA/DIEGO"]
+        };
+
+        // Funções de Backup Local (Importar/Exportar JSON)
+        function exportarBackup() {
+            salvarDados(true);
+            const dados = localStorage.getItem('agendaNovoHorizonteCardV13');
+            if(!dados) return alert("Nenhum dado para fazer backup.");
+            
+            const blob = new Blob([dados], { type: "application/json" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `Backup_Agenda_NH_${new Date().toISOString().split('T')[0]}.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        function importarBackup() {
+            document.getElementById('fileInputBackup').click();
+        }
+
+        function lerArquivoBackup(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const jsonStr = e.target.result;
+                    const dadosObj = JSON.parse(jsonStr);
+                    // Checagem básica se o arquivo é o correto
+                    if (dadosObj && (dadosObj.celulas || dadosObj.categorias)) {
+                        localStorage.setItem('agendaNovoHorizonteCardV13', jsonStr);
+                        carregarDadosTabela();
+                        alert("✅ Dados restaurados com sucesso do seu backup!");
+                    } else {
+                        alert("❌ Arquivo de backup inválido. Tente outro arquivo.");
+                    }
+                } catch (err) {
+                    alert("❌ Erro ao ler o arquivo. Certifique-se de que é o arquivo .json gerado pelo sistema.");
+                }
+                event.target.value = ''; // Limpa o input
+            };
+            reader.readAsText(file);
+        }
+
+        // Copiar e Colar Funções
+        function copiarEvento() {
+            eventoCopiado = {
+                tipo: document.getElementById('modalTipo').value,
+                hinicio: document.getElementById('modalHoraInicio').value,
+                hfim: document.getElementById('modalHoraFim').value,
+                local: document.getElementById('modalLocal').value,
+                prof: document.getElementById('modalProfEvento').value
+            };
+            atualizarBtnColar();
+            
+            const btnCopiar = document.querySelector('button[onclick="copiarEvento()"]');
+            const originalText = btnCopiar.innerHTML;
+            btnCopiar.innerHTML = '<i class="fa-solid fa-check mr-1"></i> Copiado!';
+            btnCopiar.classList.replace('bg-indigo-600', 'bg-green-600');
+            setTimeout(() => {
+                btnCopiar.innerHTML = originalText;
+                btnCopiar.classList.replace('bg-green-600', 'bg-indigo-600');
+            }, 1000);
+        }
+
+        function colarEvento() {
+            if(!eventoCopiado) return;
+            document.getElementById('modalTipo').value = eventoCopiado.tipo;
+            document.getElementById('modalHoraInicio').value = eventoCopiado.hinicio;
+            document.getElementById('modalHoraFim').value = eventoCopiado.hfim;
+            document.getElementById('modalLocal').value = eventoCopiado.local;
+            document.getElementById('modalProfEvento').value = eventoCopiado.prof;
+        }
+
+        function atualizarBtnColar() {
+            const btn = document.getElementById('btnColar');
+            if(eventoCopiado) {
+                btn.disabled = false;
+                btn.classList.remove('opacity-50', 'cursor-not-allowed');
+            } else {
+                btn.disabled = true;
+                btn.classList.add('opacity-50', 'cursor-not-allowed');
+            }
+        }
+
+        // Formatação
+        function formatarConteudo(tipo, hInicio, hFim, local, prof) {
+            if (!tipo && !hInicio && !local && !prof) return '';
+            
+            let html = '<div class="evento-wrapper" style="font-size: 16px;">';
+            if(hInicio) {
+                html += `<div style="font-size: 1.1em; font-weight: 900; color: #000; white-space: nowrap;">${hInicio}${hFim ? ' - ' + hFim : ''}</div>`;
+            }
+            if(tipo) {
+                let color = '#000';
+                let tUp = tipo.toUpperCase();
+                if(tUp.includes('JOGO') || tUp.includes('ESTADUAL') || tUp.includes('MUNICIPAL') || tUp.includes('AMISTOSO') || tUp.includes('COPA') || tUp.includes('CAMPEONATO')) {
+                    color = '#ea580c';
+                }
+                if(tUp.includes('FOLGA')) color = '#16a34a';
+                
+                html += `<div style="font-size: 0.85em; font-weight: 900; color: ${color}; text-transform: uppercase; margin-top: 2px;">${tipo}</div>`;
+            }
+            if(local) {
+                html += `<div style="font-size: 0.9em; font-weight: 900; color: #000; text-transform: uppercase; margin-top: 2px;">${local}</div>`;
+            }
+            if(prof) {
+                html += `<div style="font-size: 0.8em; font-weight: 900; color: #000; text-transform: uppercase; margin-top: 2px;">${prof}</div>`;
+            }
+            html += '</div>';
+            return html;
+        }
+
+        function ajustarFontes() {
+            const tdElements = document.querySelectorAll('#tabela-corpo td[data-col]');
+            tdElements.forEach(td => {
+                const wrapper = td.querySelector('.evento-wrapper');
+                if(!wrapper) return;
+                const maxHeight = td.clientHeight - 4;
+                const maxWidth = td.clientWidth - 4;
+                let fontSize = 16;
+                wrapper.style.fontSize = fontSize + 'px';
+                while ((wrapper.scrollHeight > maxHeight || wrapper.scrollWidth > maxWidth) && fontSize > 7) {
+                    fontSize -= 0.5;
+                    wrapper.style.fontSize = fontSize + 'px';
+                }
+            });
+        }
+
+        function formatarCategoria(anos, prof) {
+            return `<div class="font-extrabold text-[18px] text-white tracking-tight drop-shadow-sm">${anos}</div>
+                    <div class="text-[13px] font-bold text-orange-400 mt-1 uppercase">${prof}</div>`;
+        }
+
+        function carregarOpcoesDropdowns() {
+            const saved = localStorage.getItem('agendaNovoHorizonteConfigDropV2');
+            if(saved) configDrop = JSON.parse(saved);
+            aplicarConfigDrop();
+        }
+
+        function aplicarConfigDrop() {
+            const select = document.getElementById('modalTipo');
+            select.innerHTML = '<option value="">Nenhum (Limpo)</option>';
+            configDrop.tipos.forEach(t => select.innerHTML += `<option value="${t}">${t}</option>`);
+            const locList = document.getElementById('locaisList');
+            locList.innerHTML = '';
+            configDrop.locais.forEach(l => locList.innerHTML += `<option value="${l}"></option>`);
+            const profList = document.getElementById('professoresList');
+            profList.innerHTML = '';
+            configDrop.professores.forEach(p => profList.innerHTML += `<option value="${p}"></option>`);
+        }
+
+        function inicializarTabela() {
+            carregarOpcoesDropdowns();
+            const tbody = document.getElementById('tabela-corpo');
+            tbody.innerHTML = '';
+            categoriasIniciais.forEach((cat, index) => {
+                const tr = document.createElement('tr');
+                tr.className = "border-b-2 border-black last:border-b-0";
+                
+                let tdCat = document.createElement('td');
+                tdCat.className = "border-r-4 border-black p-3 text-center cursor-pointer bg-gradient-to-b from-gray-800 to-gray-900 hover:brightness-110 transition-all";
+                tdCat.dataset.anos = cat.anos;
+                tdCat.dataset.prof = cat.prof;
+                tdCat.innerHTML = formatarCategoria(cat.anos, cat.prof);
+                tdCat.onclick = function() { abrirCatModal(this, index); };
+                tr.appendChild(tdCat);
+                
+                diasSemana.forEach((dia, iDia) => {
+                    let td = document.createElement('td');
+                    let bgGradientClass = iDia % 2 === 0 
+                        ? "bg-gradient-to-b from-orange-100 to-orange-200" 
+                        : "bg-gradient-to-b from-orange-50 to-orange-100";
+                    td.className = `border-r-2 border-black p-0.5 h-[85px] relative cursor-pointer hover:brightness-95 transition-all overflow-hidden ${bgGradientClass}`;
+                    if(iDia === 6) td.classList.remove('border-r-2');
+                    td.setAttribute('data-row', index);
+                    td.setAttribute('data-col', dia);
+                    td.setAttribute('data-nome-dia', nomesDias[iDia]);
+                    td.onclick = function() { abrirModal(this); };
+                    tr.appendChild(td);
+                });
+                tbody.appendChild(tr);
+            });
+            carregarDadosTabela();
+            window.addEventListener('resize', ajustarFontes);
+        }
+
+        /* --- Modais --- */
+        function abrirConfigModal() {
+            // AQUI ESTAVA O PROBLEMA ANTERIOR, AGORA USAMOS \n ESTRITAMENTE COMO STRING
+            document.getElementById('configTiposTxt').value = configDrop.tipos.join('\n');
+            document.getElementById('configLocaisTxt').value = configDrop.locais.join('\n');
+            document.getElementById('configProfessoresTxt').value = configDrop.professores.join('\n');
+            document.getElementById('configModal').classList.add('active');
+        }
+        function fecharConfigModal() { document.getElementById('configModal').classList.remove('active'); }
+        
+        function salvarConfigModal() {
+            const txtTipos = document.getElementById('configTiposTxt').value;
+            const txtLocais = document.getElementById('configLocaisTxt').value;
+            const txtProfessores = document.getElementById('configProfessoresTxt').value;
+            configDrop.tipos = txtTipos.split('\n').map(s => s.trim().toUpperCase()).filter(s => s);
+            configDrop.locais = txtLocais.split('\n').map(s => s.trim().toUpperCase()).filter(s => s);
+            configDrop.professores = txtProfessores.split('\n').map(s => s.trim().toUpperCase()).filter(s => s);
+            localStorage.setItem('agendaNovoHorizonteConfigDropV2', JSON.stringify(configDrop));
+            aplicarConfigDrop();
+            fecharConfigModal();
+            alert("Listas atualizadas com sucesso!");
+        }
+
+        function abrirCatModal(cell, rowIndex) {
+            catCellAtual = cell;
+            document.getElementById('modalCatAnos').value = cell.dataset.anos || '';
+            document.getElementById('modalCatProf').value = cell.dataset.prof || '';
+            document.getElementById('catModal').classList.add('active');
+        }
+        function fecharCatModal() { document.getElementById('catModal').classList.remove('active'); catCellAtual = null; }
+        function salvarCatModal() {
+            if(!catCellAtual) return;
+            const anos = document.getElementById('modalCatAnos').value;
+            const prof = document.getElementById('modalCatProf').value;
+            catCellAtual.dataset.anos = anos;
+            catCellAtual.dataset.prof = prof;
+            catCellAtual.innerHTML = formatarCategoria(anos, prof);
+            fecharCatModal();
+            salvarDados(true);
+        }
+
+        function abrirModal(cell) {
+            celulaAtual = cell;
+            const dataset = cell.dataset;
+            const tr = cell.parentElement;
+            const catCell = tr.cells[0];
+            const nomeCategoria = catCell.dataset.anos;
+            
+            document.getElementById('modalTitle').innerText = `${dataset.nomeDia} - Sub ${nomeCategoria}`;
+            document.getElementById('modalTipo').value = dataset.tipo || '';
+            document.getElementById('modalHoraInicio').value = dataset.hinicio || '';
+            document.getElementById('modalHoraFim').value = dataset.hfim || '';
+            document.getElementById('modalLocal').value = dataset.local || '';
+            document.getElementById('modalProfEvento').value = dataset.prof || '';
+            
+            atualizarBtnColar();
+            document.getElementById('cellModal').classList.add('active');
+        }
+        function fecharModal() { document.getElementById('cellModal').classList.remove('active'); celulaAtual = null; }
+        
+        function limparCelulaModal() {
+            document.getElementById('modalTipo').value = '';
+            document.getElementById('modalHoraInicio').value = '';
+            document.getElementById('modalHoraFim').value = '';
+            document.getElementById('modalLocal').value = '';
+            document.getElementById('modalProfEvento').value = '';
+            salvarModal();
+        }
+
+        function salvarModal() {
+            if(!celulaAtual) return;
+            const tipo = document.getElementById('modalTipo').value;
+            const hInicio = document.getElementById('modalHoraInicio').value;
+            const hFim = document.getElementById('modalHoraFim').value;
+            const local = document.getElementById('modalLocal').value;
+            const prof = document.getElementById('modalProfEvento').value;
+            
+            celulaAtual.dataset.tipo = tipo;
+            celulaAtual.dataset.hinicio = hInicio;
+            celulaAtual.dataset.hfim = hFim;
+            celulaAtual.dataset.local = local;
+            celulaAtual.dataset.prof = prof;
+            
+            celulaAtual.innerHTML = formatarConteudo(tipo, hInicio, hFim, local, prof);
+            fecharModal();
+            ajustarFontes(); 
+            salvarDados(true);
+        }
+
+        function exportarImagem() {
+            const area = document.getElementById('capture-area');
+            const periodoTxt = document.getElementById('periodo').innerText.replace(/[^a-zA-Z0-9]/g, '_');
+            html2canvas(area, { scale: 2, useCORS: true, backgroundColor: '#000' }).then(canvas => {
+                const link = document.createElement('a');
+                link.download = `Card_Agenda_${periodoTxt}.jpg`;
+                link.href = canvas.toDataURL('image/jpeg', 0.95);
+                link.click();
+            });
+        }
+
+        function salvarDados(silencioso = false) {
+            const dados = {
+                periodo: document.getElementById('periodo').innerHTML,
+                aviso: document.getElementById('aviso').innerHTML,
+                footer: document.getElementById('footer-preparadores').innerHTML,
+                categorias: {},
+                celulas: {}
+            };
+            const rows = document.getElementById('tabela-corpo').querySelectorAll('tr');
+            rows.forEach((row, index) => {
+                const catCell = row.cells[0];
+                dados.categorias[index] = { anos: catCell.dataset.anos || '', prof: catCell.dataset.prof || '' };
+            });
+            const cells = document.querySelectorAll('#tabela-corpo td[data-col]');
+            cells.forEach(cell => {
+                const key = `${cell.getAttribute('data-row')}-${cell.getAttribute('data-col')}`;
+                dados.celulas[key] = {
+                    tipo: cell.dataset.tipo || '',
+                    hinicio: cell.dataset.hinicio || '',
+                    hfim: cell.dataset.hfim || '',
+                    local: cell.dataset.local || '',
+                    prof: cell.dataset.prof || ''
+                };
+            });
+            localStorage.setItem('agendaNovoHorizonteCardV13', JSON.stringify(dados));
+            if(!silencioso) alert('Dados salvos no navegador com sucesso!');
+        }
+
+        function carregarDadosTabela() {
+            const dadosSalvos = localStorage.getItem('agendaNovoHorizonteCardV13');
+            // Migra das versões anteriores
+            const fallback = localStorage.getItem('agendaNovoHorizonteCardV12') || localStorage.getItem('agendaNovoHorizonteCardV11') || localStorage.getItem('agendaNovoHorizonteCardV10');
+            const source = dadosSalvos || fallback;
+
+            if (source) {
+                try {
+                    const dados = JSON.parse(source);
+                    if(dados.periodo) document.getElementById('periodo').innerHTML = dados.periodo;
+                    if(dados.aviso) document.getElementById('aviso').innerHTML = dados.aviso;
+                    if(dados.footer) document.getElementById('footer-preparadores').innerHTML = dados.footer;
+                    
+                    const rows = document.getElementById('tabela-corpo').querySelectorAll('tr');
+                    rows.forEach((row, index) => {
+                        if(dados.categorias && dados.categorias[index]) {
+                            const catData = dados.categorias[index];
+                            const catCell = row.cells[0];
+                            catCell.dataset.anos = catData.anos;
+                            catCell.dataset.prof = catData.prof;
+                            catCell.innerHTML = formatarCategoria(catData.anos, catData.prof);
+                        }
+                    });
+
+                    const cells = document.querySelectorAll('#tabela-corpo td[data-col]');
+                    cells.forEach(cell => {
+                        const key = `${cell.getAttribute('data-row')}-${cell.getAttribute('data-col')}`;
+                        if (dados.celulas && dados.celulas[key]) {
+                            const c = dados.celulas[key];
+                            cell.dataset.tipo = c.tipo || '';
+                            cell.dataset.hinicio = c.hinicio || '';
+                            cell.dataset.hfim = c.hfim || '';
+                            cell.dataset.local = c.local || '';
+                            cell.dataset.prof = c.prof || '';
+                            
+                            cell.innerHTML = formatarConteudo(c.tipo, c.hinicio, c.hfim, c.local, c.prof);
+                        }
+                    });
+                } catch(e) {
+                    console.error("Erro ao carregar dados", e);
+                }
+            }
+            setTimeout(ajustarFontes, 100);
+        }
+
+        function limparTabela() {
+            if(confirm('Tem certeza que deseja limpar todos os horários da tabela?')) {
+                const cells = document.querySelectorAll('#tabela-corpo td[data-col]');
+                cells.forEach(cell => {
+                    cell.dataset.tipo = '';
+                    cell.dataset.hinicio = '';
+                    cell.dataset.hfim = '';
+                    cell.dataset.local = '';
+                    cell.dataset.prof = '';
+                    cell.innerHTML = '';
+                });
+                salvarDados(true);
+            }
+        }
+
+        window.onclick = function(event) {
+            const cellModal = document.getElementById('cellModal');
+            const catModal = document.getElementById('catModal');
+            const configModal = document.getElementById('configModal');
+            if (event.target == cellModal) fecharModal();
+            if (event.target == catModal) fecharCatModal();
+            if (event.target == configModal) fecharConfigModal();
+        }
+
+        document.addEventListener('DOMContentLoaded', inicializarTabela);
+    </script>
+</body>
+</html>
